@@ -12,6 +12,18 @@ public class Player : MonoBehaviour
     }
 
     public Camera cam;
+    public Transform headTransform;
+    public float headRadius;
+    public Vector2 leanPosScale;
+    public float leanPosAngleMax;
+    public float leanPosRadius;
+    public float leanRotAngleMax;
+    public float leanSpeed;
+    public AnimationCurve leanCurve;
+    float leanProgress;
+    Vector3 leanPos0, leanPos1, leanPos2;
+
+    [Space(10)]
     public float movementSpeed;
     public float sprintSpeed;
     public float jumpSpeed;
@@ -23,6 +35,12 @@ public class Player : MonoBehaviour
     CharacterController cc;
     Vector3 movementDelta;
     bool isGrounded;
+
+    static Vector3 GetScaledLeanPos(Vector3 pos, Vector3 headPos, Vector2 scale) {
+        var offset = (pos - headPos);
+        offset = (new Vector3(offset.x, 0f, offset.z)) * scale.x + Vector3.up * offset.y * scale.y;
+        return headPos + offset;
+    }
 
     void Rotate(float leftRightDelta, float upDownDelta)
     {
@@ -67,9 +85,10 @@ public class Player : MonoBehaviour
 
     void OnDrawGizmos()
     {
-        Gizmos.color = new Color(0f, 1f, 0.5f, 1f);
-        // Gizmos.DrawCube(transform.position, new Vector3(1f, 1f, 1f));
-
+        Gizmos.color = new Color(0f, 1f, 0f, 0.3f);
+        Gizmos.DrawCube(transform.position, Vector3.one * 0.5f);
+        Gizmos.color = new Color(0f, 0f, 1f, 0.3f);
+        Gizmos.DrawSphere(headTransform.position, headRadius);
 
         if (cc != null) {
             if ((cc.collisionFlags & CollisionFlags.Above) != 0) {
@@ -79,18 +98,27 @@ public class Player : MonoBehaviour
             }
         }
 
+        Gizmos.color = Color.red;
+        // leanPos0 = headTransform.position + transform.rotation * new Vector3(-headLeanPositionBounds.x, -headLeanPositionBounds.y, 0f);
+        // leanPos1 = headTransform.position;
+        // leanPos2 = headTransform.position + transform.rotation * new Vector3( headLeanPositionBounds.x, -headLeanPositionBounds.y, 0f);
 
-        var cc_ = GetComponent<CharacterController>();
-        Gizmos.DrawCube(transform.position + cc_.center, Vector3.one * 0.15f);
-        Gizmos.DrawCube(transform.position + cc_.center - transform.up *  (cc_.height / 2f - cc_.radius), Vector3.one * 0.15f);
-        var origin = transform.position + cc_.center;
-        var bottom = origin - transform.up * (cc_.height / 2f - cc_.radius);
-        var up     = origin + transform.up * (cc_.height / 2f - cc_.radius) + Vector3.up * 0.1f;
-        var colliders = Physics.OverlapCapsule(origin, up, cc_.radius, ~LayerMask.GetMask("Player"));
-        if (colliders.Length > 0) {
-            
+        int editorPrecision = 20;
+        for (int i = 0; i < editorPrecision; i++) {
+            var center = transform.position;
+            var angleStart = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, (float) i / editorPrecision);
+            var angleEnd = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, (float) (i+1) / editorPrecision);
+
+            var p1 = center + Quaternion.AngleAxis(angleStart, -transform.forward) * Vector3.up * leanPosRadius;
+            var p2 = center + Quaternion.AngleAxis(angleEnd,   -transform.forward) * Vector3.up * leanPosRadius;
+
+            Gizmos.DrawLine(
+                GetScaledLeanPos(p1, center + leanPosRadius * transform.up, leanPosScale),
+                GetScaledLeanPos(p2, center + leanPosRadius * transform.up, leanPosScale)
+                // center + Quaternion.AngleAxis(angleStart, -transform.forward) * Vector3.up * headLeanRadius,
+                // center + Quaternion.AngleAxis(angleEnd,   -transform.forward) * Vector3.up * headLeanRadius
+            );
         }
-
     }
 
     void Awake()
@@ -124,5 +152,42 @@ public class Player : MonoBehaviour
         movementDelta = Vector3.zero;
 
         Rotate(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+
+        
+        //  ( Input.GetAxis("Lean")) * Time.deltaTime
+        if (Mathf.Abs(Input.GetAxis("Lean")) > 0.1f) {
+            leanProgress += Input.GetAxis("Lean") * leanSpeed * Time.deltaTime;
+            if (leanProgress >  1f) {
+                leanProgress =  1f;
+            } else if (leanProgress < -1f) {
+                leanProgress = -1f;
+            }
+        } else if (Mathf.Abs(leanProgress) > leanSpeed * Time.deltaTime) {
+            leanProgress -= Mathf.Sign(leanProgress) * leanSpeed * Time.deltaTime;
+            if (Mathf.Abs(leanProgress) <= leanSpeed * Time.deltaTime)
+                leanProgress = 0f;
+        }
+
+        // Physics.SphereCast(headTransform.transform.position, headRadius, headTransform.right * Mathf.Sign(leanProgress), out var hitInfo, 1f, )
+
+        var curveValue = leanCurve.Evaluate(Mathf.Abs(leanProgress)) * Mathf.Sign(leanProgress);
+        var center = transform.position;
+        var angle = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, 0.5f + curveValue / 2f);
+        var p = center + Quaternion.AngleAxis(angle, -transform.forward) * Vector3.up * leanPosRadius;
+        headTransform.position = GetScaledLeanPos(p, center + leanPosRadius * transform.up, leanPosScale);
+        // var zAngle = -Input.GetAxis("Lean") * Vector3.Angle(headTransform.position - transform.position, transform.up);
+        var rotAngle = Mathf.Lerp(-leanRotAngleMax, leanRotAngleMax, 0.5f + curveValue / 2f);
+        headTransform.localRotation = Quaternion.Euler(0f, 0f, -rotAngle);
+    }
+
+    bool IsLeanAllowed(float leanProgress) {
+        var curveValue = leanCurve.Evaluate(Mathf.Abs(leanProgress)) * Mathf.Sign(leanProgress);
+        var center = transform.position;
+        var angle = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, 0.5f + curveValue / 2f);
+        var p = center + Quaternion.AngleAxis(angle, -transform.forward) * Vector3.up * leanPosRadius;
+        var projectedPosition = GetScaledLeanPos(p, center + leanPosRadius * transform.up, leanPosScale);
+        var nonPlayerMask = ~(LayerMask.GetMask("Player"));
+        var colliders = Physics.OverlapSphere(projectedPosition, headRadius, nonPlayerMask);
+        return colliders.Length == 0;
     }
 }
