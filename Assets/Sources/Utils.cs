@@ -48,18 +48,27 @@ public static class Utils
         Gizmos.matrix = oldGizmosMatrix;
     }
 
-    public static float EaseOutQuint(float x)
+    public static float EaseOutPower(float x, float p)
     {
-        return 1 - Mathf.Pow(1f - x, 5f);
+        x = Mathf.Clamp01(x);
+        return 1f - Mathf.Pow(1f - x, p);
     }
 
-    public static Vector3 GetPointOnBezier(Vector3 p0, Vector3 p1, Vector3 p2, float t)
+    public static float EaseOutPowerInverted(float x, float p)
     {
-        t = Mathf.Clamp01(t);
-        float oneMinusT = 1f - t;
-        return
-        oneMinusT * oneMinusT * p0 +
-        2f * oneMinusT * t * p1 +
-        t * t * p2;
+        x = Mathf.Clamp01(x);
+        return 1f - Mathf.Pow(1f - x, 1f / p);
+    }
+
+    public static float EaseInPower(float x, float p)
+    {
+        x = Mathf.Clamp01(x);
+        return Mathf.Pow(x, p);
+    }
+
+    public static float EaseInPowerInverted(float x, float p)
+    {
+        x = Mathf.Clamp01(x);
+        return Mathf.Pow(x, 1f / p);
     }
 }

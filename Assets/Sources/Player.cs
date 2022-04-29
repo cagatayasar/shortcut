@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
+[ExecuteInEditMode]
 public class Player : MonoBehaviour
 {
     public enum VerticalState
@@ -11,17 +12,23 @@ public class Player : MonoBehaviour
         Jump,
     }
 
+    public enum LeanState
+    {
+        Center,
+        LeaningWithInput,
+        ReturningToCenter,
+    }
+
     public Camera cam;
     public Transform headTransform;
     public float headRadius;
-    public Vector2 leanPosScale;
-    public float leanPosAngleMax;
-    public float leanPosRadius;
+    public float leanPosDistance;
     public float leanRotAngleMax;
     public float leanSpeed;
-    public AnimationCurve leanCurve;
+    [Min(1f)]
+    public float leanEasePower;
     float leanProgress;
-    Vector3 leanPos0, leanPos1, leanPos2;
+    Vector3 headCenterLocalPos;
 
     [Space(10)]
     public float movementSpeed;
@@ -32,14 +39,14 @@ public class Player : MonoBehaviour
     const float rotationXMax =  90f;
 
     VerticalState verticalState = VerticalState.Ground;
+    LeanState leanState = LeanState.Center;
     CharacterController cc;
     Vector3 movementDelta;
-    bool isGrounded;
 
-    static Vector3 GetScaledLeanPos(Vector3 pos, Vector3 headPos, Vector2 scale) {
-        var offset = (pos - headPos);
-        offset = (new Vector3(offset.x, 0f, offset.z)) * scale.x + Vector3.up * offset.y * scale.y;
-        return headPos + offset;
+    void Move(Vector3 movement, bool isSprint)
+    {
+        var movementMultiplier = isSprint ? sprintSpeed : movementSpeed;
+        movementDelta += movement * movementMultiplier * Time.deltaTime;
     }
 
     void Rotate(float leftRightDelta, float upDownDelta)
@@ -61,6 +68,62 @@ public class Player : MonoBehaviour
         var camEulers = new Vector3(newEulers.x, 0f, newEulers.z);
         transform.localRotation = Quaternion.Euler(playerEulers);
         cam.transform.localRotation = Quaternion.Euler(camEulers);
+    }
+
+    void Lean(float leanAxis)
+    {
+        // Update lean state
+        if (leanState == LeanState.Center) {
+            if (Mathf.Abs(leanAxis) > 0.1f) {
+                leanState = LeanState.LeaningWithInput;
+            }
+        } else if (leanState == LeanState.ReturningToCenter) {
+            if (Mathf.Abs(leanAxis) > 0.1f) {
+                leanState = LeanState.LeaningWithInput;
+                leanProgress = Utils.EaseOutPowerInverted(Utils.EaseInPower(Mathf.Abs(leanProgress), leanEasePower), leanEasePower) * Mathf.Sign(leanProgress);
+            }
+        } else if (leanState == LeanState.LeaningWithInput) {
+            if (Mathf.Abs(leanAxis) < 0.1f) {
+                leanState = LeanState.ReturningToCenter;
+                leanProgress = Utils.EaseInPowerInverted(Utils.EaseOutPower(Mathf.Abs(leanProgress), leanEasePower), leanEasePower) * Mathf.Sign(leanProgress);
+            }
+        }
+
+        // Update lean progress & set mapped value
+        var leanProgressMapped = 0f;
+        if (leanState == LeanState.ReturningToCenter) {
+            leanProgress -= Mathf.Sign(leanProgress) * leanSpeed * Time.deltaTime;
+            if (Mathf.Abs(leanProgress) <= leanSpeed * Time.deltaTime) {
+                leanProgress = 0f;
+                leanState = LeanState.Center;
+            }
+            leanProgressMapped = Utils.EaseInPower(Mathf.Abs(leanProgress), leanEasePower);
+        } else if (leanState == LeanState.LeaningWithInput) {
+            leanProgress += Mathf.Sign(leanAxis) * leanSpeed * Time.deltaTime;
+            if (Mathf.Abs(leanProgress) > 1f) {
+                leanProgress = Mathf.Sign(leanProgress) * 1f;
+            }
+            leanProgressMapped = Utils.EaseOutPower(Mathf.Abs(leanProgress), leanEasePower);
+        }
+
+        // Check collision, then set head position, rotation
+        var leanSign = Mathf.Sign(leanProgress);
+        var didHitWhileLeaning = Physics.SphereCast(transform.position + headCenterLocalPos, headRadius, transform.right * leanSign,
+            out var hitInfo, leanProgressMapped * leanPosDistance, ~LayerMask.GetMask("Player"));
+        if (didHitWhileLeaning) {
+            headTransform.localPosition = headCenterLocalPos + Vector3.right * hitInfo.distance * leanSign;
+            var rotAngle = Mathf.Lerp(-leanRotAngleMax, leanRotAngleMax, 0.5f + leanSign * hitInfo.distance / (2f * leanPosDistance));
+            headTransform.localRotation = Quaternion.Euler(0f, 0f, -rotAngle);
+            if (leanState == LeanState.ReturningToCenter) {
+                leanProgress = Mathf.Min(Mathf.Abs(leanProgress), Utils.EaseInPowerInverted(hitInfo.distance / leanPosDistance, leanEasePower)) * leanSign;
+            } else if (leanState == LeanState.LeaningWithInput) {
+                leanProgress = Mathf.Min(Mathf.Abs(leanProgress), Utils.EaseOutPowerInverted(hitInfo.distance / leanPosDistance, leanEasePower)) * leanSign;
+            }
+        } else {
+            headTransform.localPosition = headCenterLocalPos + Vector3.right * leanPosDistance * leanProgressMapped * leanSign;
+            var rotAngle = Mathf.Lerp(-leanRotAngleMax, leanRotAngleMax, 0.5f + leanProgressMapped * leanSign / 2f);
+            headTransform.localRotation = Quaternion.Euler(0f, 0f, -rotAngle);
+        }
     }
 
     IEnumerator Jump_Coroutine()
@@ -99,31 +162,40 @@ public class Player : MonoBehaviour
         }
 
         Gizmos.color = Color.red;
-        // leanPos0 = headTransform.position + transform.rotation * new Vector3(-headLeanPositionBounds.x, -headLeanPositionBounds.y, 0f);
-        // leanPos1 = headTransform.position;
-        // leanPos2 = headTransform.position + transform.rotation * new Vector3( headLeanPositionBounds.x, -headLeanPositionBounds.y, 0f);
+        Gizmos.DrawLine(
+            transform.position + headCenterLocalPos - transform.right * leanPosDistance,
+            transform.position + headCenterLocalPos + transform.right * leanPosDistance
+        );
 
-        int editorPrecision = 20;
-        for (int i = 0; i < editorPrecision; i++) {
-            var center = transform.position;
-            var angleStart = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, (float) i / editorPrecision);
-            var angleEnd = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, (float) (i+1) / editorPrecision);
-
-            var p1 = center + Quaternion.AngleAxis(angleStart, -transform.forward) * Vector3.up * leanPosRadius;
-            var p2 = center + Quaternion.AngleAxis(angleEnd,   -transform.forward) * Vector3.up * leanPosRadius;
-
-            Gizmos.DrawLine(
-                GetScaledLeanPos(p1, center + leanPosRadius * transform.up, leanPosScale),
-                GetScaledLeanPos(p2, center + leanPosRadius * transform.up, leanPosScale)
-                // center + Quaternion.AngleAxis(angleStart, -transform.forward) * Vector3.up * headLeanRadius,
-                // center + Quaternion.AngleAxis(angleEnd,   -transform.forward) * Vector3.up * headLeanRadius
-            );
+        var leanProgressMapped = Utils.EaseOutPower(Mathf.Abs(leanProgress), leanEasePower);
+        var isHit = Physics.SphereCast(transform.position + headCenterLocalPos, headRadius, transform.right * Mathf.Sign(leanProgress),
+            out var hitInfo, leanProgressMapped * leanPosDistance, ~LayerMask.GetMask("Player"));
+        if (isHit) {
+            // Gizmos.DrawCube(transform.position + headCenterLocalPos + transform.right * curveValue * leanPosDistance, Vector3.one * 0.2f);
+            Gizmos.DrawCube(hitInfo.point, Vector3.one * 0.2f);
         }
+        // Gizmos.DrawCube(transform.position + headCenterLocalPos + headTransform.right * Mathf.Sign(leanProgress) * curveValue * leanPosDistance, Vector3.one * 0.2f);
     }
 
     void Awake()
     {
         cc = GetComponent<CharacterController>();
+    }
+
+    void Start()
+    {
+        // headCenterLocalPos = headTransform.localPosition;
+        leanProgress = 0f;
+        headCenterLocalPos = new Vector3(0f, 0.7f, 0f);
+
+        var x = 0.4f;
+        var y = Utils.EaseOutPower(x, leanEasePower);
+        var xfound = Utils.EaseOutPowerInverted(y, leanEasePower);
+        Debug.Log("x: " + x + ", y: " + y + ", x found: " + xfound);
+        x = 0.2f;
+        y = Utils.EaseOutPower(x, leanEasePower);
+        xfound = Utils.EaseOutPowerInverted(y, leanEasePower);
+        Debug.Log("x: " + x + ", y: " + y + ", x found: " + xfound);
     }
 
     void Update()
@@ -137,57 +209,21 @@ public class Player : MonoBehaviour
             movementVector += Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * Vector3.left;
         if (Input.GetKey(KeyCode.D))
             movementVector += Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * Vector3.right;
-        var movementMultiplier = Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : movementSpeed;
-        movementDelta += movementVector * movementMultiplier * Time.deltaTime;
 
         if (Input.GetKeyDown(KeyCode.Space)) {
             if (verticalState == VerticalState.Ground) {
                 StartCoroutine(Jump_Coroutine());
             }
         }
+        var isSprint = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        Move(movementVector, isSprint);
+        Rotate(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+        Lean(Input.GetAxis("Lean"));
         if (verticalState == VerticalState.Ground) {
             movementDelta += Vector3.down * Time.deltaTime;
         }
+
         cc.Move(movementDelta);
         movementDelta = Vector3.zero;
-
-        Rotate(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
-
-        
-        //  ( Input.GetAxis("Lean")) * Time.deltaTime
-        if (Mathf.Abs(Input.GetAxis("Lean")) > 0.1f) {
-            leanProgress += Input.GetAxis("Lean") * leanSpeed * Time.deltaTime;
-            if (leanProgress >  1f) {
-                leanProgress =  1f;
-            } else if (leanProgress < -1f) {
-                leanProgress = -1f;
-            }
-        } else if (Mathf.Abs(leanProgress) > leanSpeed * Time.deltaTime) {
-            leanProgress -= Mathf.Sign(leanProgress) * leanSpeed * Time.deltaTime;
-            if (Mathf.Abs(leanProgress) <= leanSpeed * Time.deltaTime)
-                leanProgress = 0f;
-        }
-
-        // Physics.SphereCast(headTransform.transform.position, headRadius, headTransform.right * Mathf.Sign(leanProgress), out var hitInfo, 1f, )
-
-        var curveValue = leanCurve.Evaluate(Mathf.Abs(leanProgress)) * Mathf.Sign(leanProgress);
-        var center = transform.position;
-        var angle = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, 0.5f + curveValue / 2f);
-        var p = center + Quaternion.AngleAxis(angle, -transform.forward) * Vector3.up * leanPosRadius;
-        headTransform.position = GetScaledLeanPos(p, center + leanPosRadius * transform.up, leanPosScale);
-        // var zAngle = -Input.GetAxis("Lean") * Vector3.Angle(headTransform.position - transform.position, transform.up);
-        var rotAngle = Mathf.Lerp(-leanRotAngleMax, leanRotAngleMax, 0.5f + curveValue / 2f);
-        headTransform.localRotation = Quaternion.Euler(0f, 0f, -rotAngle);
-    }
-
-    bool IsLeanAllowed(float leanProgress) {
-        var curveValue = leanCurve.Evaluate(Mathf.Abs(leanProgress)) * Mathf.Sign(leanProgress);
-        var center = transform.position;
-        var angle = Mathf.Lerp(-leanPosAngleMax, leanPosAngleMax, 0.5f + curveValue / 2f);
-        var p = center + Quaternion.AngleAxis(angle, -transform.forward) * Vector3.up * leanPosRadius;
-        var projectedPosition = GetScaledLeanPos(p, center + leanPosRadius * transform.up, leanPosScale);
-        var nonPlayerMask = ~(LayerMask.GetMask("Player"));
-        var colliders = Physics.OverlapSphere(projectedPosition, headRadius, nonPlayerMask);
-        return colliders.Length == 0;
     }
 }
