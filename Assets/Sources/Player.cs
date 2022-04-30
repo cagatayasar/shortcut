@@ -37,6 +37,7 @@ public class Player : MonoBehaviour
     public float sensitivity;
     const float rotationXMin = -90f;
     const float rotationXMax =  90f;
+    const float interactionDistance = 3f;
 
     VerticalState verticalState = VerticalState.Ground;
     LeanState leanState = LeanState.Center;
@@ -180,22 +181,12 @@ public class Player : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
+        leanProgress = 0f;
     }
 
     void Start()
     {
-        // headCenterLocalPos = headTransform.localPosition;
-        leanProgress = 0f;
-        headCenterLocalPos = new Vector3(0f, 0.7f, 0f);
-
-        var x = 0.4f;
-        var y = Utils.EaseOutPower(x, leanEasePower);
-        var xfound = Utils.EaseOutPowerInverted(y, leanEasePower);
-        Debug.Log("x: " + x + ", y: " + y + ", x found: " + xfound);
-        x = 0.2f;
-        y = Utils.EaseOutPower(x, leanEasePower);
-        xfound = Utils.EaseOutPowerInverted(y, leanEasePower);
-        Debug.Log("x: " + x + ", y: " + y + ", x found: " + xfound);
+        headCenterLocalPos = new Vector3(0f, headTransform.localPosition.y, 0f);
     }
 
     void Update()
@@ -225,5 +216,16 @@ public class Player : MonoBehaviour
 
         cc.Move(movementDelta);
         movementDelta = Vector3.zero;
+
+        Interactable hoveredInteractable = null;
+        if (Physics.Raycast(cam.transform.position, cam.transform.forward, out var hitInfo, interactionDistance)) {
+            if (hitInfo.transform.TryGetComponent<Interactable>(out hoveredInteractable)) {
+                hoveredInteractable.GetComponent<UnlitOnHover>().Hover();
+            }
+        }
+
+        if (Input.GetKeyDown(KeyCode.F)) {
+            hoveredInteractable?.Interact();
+        }
     }
 }
