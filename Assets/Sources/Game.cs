@@ -4,12 +4,15 @@ using UnityEngine;
 
 public class Game : MonoBehaviour
 {
-    public static Game instance;
+    public static Game inst;
 
+    public bool focusChangedThisFrame;
+
+    //------------------------------------------------------------------------
     void Awake()
     {
-        if (instance == null) {
-           instance = this;
+        if (inst == null) {
+           inst = this;
         } else {
             Debug.LogError("This is a singleton, and there are multiple instances of it.");
             Destroy(gameObject);
@@ -18,5 +21,13 @@ public class Game : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
+        Application.focusChanged += (bool focused) => focusChangedThisFrame = true;
+    }
+
+    //------------------------------------------------------------------------
+    void LateUpdate()
+    {
+        focusChangedThisFrame = false;
     }
 }

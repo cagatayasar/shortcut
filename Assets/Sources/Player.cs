@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
-[ExecuteInEditMode]
 public class Player : MonoBehaviour
 {
     public enum VerticalState
@@ -208,7 +207,9 @@ public class Player : MonoBehaviour
         }
         var isSprint = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         Move(movementVector, isSprint);
-        Rotate(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+        if (Application.isFocused && !Game.inst.focusChangedThisFrame) {
+            Rotate(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+        }
         Lean(Input.GetAxis("Lean"));
         if (verticalState == VerticalState.Ground) {
             movementDelta += Vector3.down * Time.deltaTime;
@@ -217,10 +218,10 @@ public class Player : MonoBehaviour
         cc.Move(movementDelta);
         movementDelta = Vector3.zero;
 
-        Interactable hoveredInteractable = null;
+        IInteractable hoveredInteractable = null;
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out var hitInfo, interactionDistance)) {
-            if (hitInfo.transform.TryGetComponent<Interactable>(out hoveredInteractable)) {
-                hoveredInteractable.GetComponent<UnlitOnHover>().Hover();
+            if (hitInfo.transform.TryGetComponent<IInteractable>(out hoveredInteractable)) {
+                hoveredInteractable.unlitOnHover.Hover();
             }
         }
 

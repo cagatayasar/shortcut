@@ -2,7 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public abstract class Interactable : MonoBehaviour
+public interface IInteractable
 {
-    public abstract void Interact();
+    public void Interact();
+    public UnlitOnHover unlitOnHover { get; set; }
 }

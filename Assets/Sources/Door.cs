@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Pixelplacement;
 
-public class Door : Interactable
+public class Door : MonoBehaviour, IInteractable
 {
     public enum DoorState
     {
@@ -18,7 +18,15 @@ public class Door : Interactable
 
     public float openAngle = 90f;
     public Transform parentRotator;
+
+    public UnlitOnHover unlitOnHover { get; set; }
+
     DoorState state = DoorState.Closed;
+
+    void Awake()
+    {
+        unlitOnHover = GetComponent<UnlitOnHover>();
+    }
 
     void OnAnimEnd()
     {
@@ -29,7 +37,7 @@ public class Door : Interactable
         }
     }
 
-    public override void Interact()
+    public void Interact()
     {
         if (state == DoorState.Opening || state == DoorState.Closing)
             return;

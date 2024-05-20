@@ -11,15 +11,21 @@ public class UnlitOnHover : MonoBehaviour
 
     float unlitness = 0f;
 
-    public void Hover()
+    void Start()
     {
-        unlitness += 2 * Time.deltaTime / animDuration;
+        meshRenderer.material = new Material(meshRenderer.material);
     }
 
     void Update()
     {
         unlitness -= Time.deltaTime / animDuration;
         unlitness = Mathf.Clamp(unlitness, -boundExtension, 1f + boundExtension);
-        meshRenderer.material.SetFloat("_Unlitness", Mathf.Clamp01(unlitness));
+        meshRenderer.material.SetColor("_BaseColor", Color.Lerp(Color.white, Color.black, unlitness));
+        meshRenderer.material.SetColor("_EmissionColor", Color.Lerp(Color.black, Color.white, unlitness));
+    }
+
+    public void Hover()
+    {
+        unlitness += 2 * Time.deltaTime / animDuration;
     }
 }
