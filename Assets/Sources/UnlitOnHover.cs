@@ -10,10 +10,14 @@ public class UnlitOnHover : MonoBehaviour
     public MeshRenderer meshRenderer;
 
     float unlitness = 0f;
+    float baseSmoothness;
+    float baseSpecularHighlights;
 
     void Start()
     {
         meshRenderer.material = new Material(meshRenderer.material);
+        baseSmoothness = meshRenderer.material.GetFloat("_Smoothness");
+        baseSpecularHighlights = meshRenderer.material.GetFloat("_SpecularHighlights");
     }
 
     void Update()
@@ -22,6 +26,8 @@ public class UnlitOnHover : MonoBehaviour
         unlitness = Mathf.Clamp(unlitness, -boundExtension, 1f + boundExtension);
         meshRenderer.material.SetColor("_BaseColor", Color.Lerp(Color.white, Color.black, unlitness));
         meshRenderer.material.SetColor("_EmissionColor", Color.Lerp(Color.black, Color.white, unlitness));
+        meshRenderer.material.SetFloat("_Smoothness", unlitness > 0.1f ? 0f : baseSmoothness);
+        meshRenderer.material.SetFloat("_SpecularHighlights", unlitness > 0.1f ? 0 : baseSpecularHighlights);
     }
 
     public void Hover()

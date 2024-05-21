@@ -20,6 +20,7 @@ public class Player : MonoBehaviour
 
     public Camera cam;
     public Transform headTransform;
+    public Light flashlight;
     public float headRadius;
     public float leanPosDistance;
     public float leanRotAngleMax;
@@ -227,6 +228,9 @@ public class Player : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.F)) {
             hoveredInteractable?.Interact();
+        }
+        if (Input.GetKeyUp(KeyCode.V)) {
+            flashlight.gameObject.SetActive(!flashlight.gameObject.activeSelf);
         }
     }
 }
