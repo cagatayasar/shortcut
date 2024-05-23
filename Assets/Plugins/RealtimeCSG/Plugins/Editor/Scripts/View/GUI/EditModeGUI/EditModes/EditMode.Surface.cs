@@ -16,7 +16,7 @@ namespace RealtimeCSG
         static readonly int textureCopyDragControlToolHash		= "textureCopyDragControl".GetHashCode();
         static readonly int textureSurfaceControlToolHash		= "textureSurfaceControl".GetHashCode();
         //static readonly int surfaceEditBrushToolHash			= "surfaceEditBrushTool".GetHashCode();
-
+        
         public bool UsesUnitySelection	{ get { return false; } }
         public bool IgnoreUnityRect		{ get { return true; } }
 
@@ -1111,7 +1111,7 @@ namespace RealtimeCSG
 
                     case EventType.KeyUp:
                     {
-                        if (Keys.CancelActionKey.IsKeyPressed()) { SelectionUtility.DeselectAll(); Event.current.Use(); break; }
+                        if (Keys.CancelActionKey.IsKeyPressed()) { SelectionUtility.DeselectAll(); Event.current.Use(); currentControl = -1; break; }
                         if (Keys.CopyMaterialTexGen.IsKeyPressed()) { if (dragMode == DragMode.TextureCopy) dragMode = DragMode.None; Event.current.Use(); break; }
                         if (Keys.HandleSceneKeyUp(EditModeManager.CurrentTool, false)) { Event.current.Use(); break; }
                         break;
